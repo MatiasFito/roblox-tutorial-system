@@ -2,6 +2,7 @@
   "name": "Tutorials",
   "tree": {
     "$className": "DataModel",
+    "$ignoreUnknownInstances": true,
 
     "ReplicatedStorage": {
       "Shared": {
@@ -20,6 +21,13 @@
         "Client": {
           "$path": "src/client"
         }
+      }
+    },
+
+    "Workspace": {
+      "$className": "Workspace",
+      "Plot": {
+        "$className": "Part"
       }
     }
   }

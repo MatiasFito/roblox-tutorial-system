@@ -1,4 +1,6 @@
 local Types = require(script.Parent.Types)
+local Workspace = game:GetService("Workspace")
+local Plot = Workspace:WaitForChild("Plot")
 
 local config: Types.TutorialConfig = {
 	-- Change DataStoreName and DataStoreKeyPrefix per project to isolate progress
@@ -6,7 +8,7 @@ local config: Types.TutorialConfig = {
 	DataStoreKeyPrefix = "tutorial_", -- Final key = prefix .. player.UserId
 
 	-- Set to "rbxassetid://XXXX" to play a sound on step completion, or leave nil
-	CompletionSoundId = nil,
+	CompletionSoundId = "rbxassetid://94049811777092",
 
 	Steps = {
 		-- Example Basic step: completes when TutorialService.CompleteStep(player) is called
@@ -14,7 +16,7 @@ local config: Types.TutorialConfig = {
 			stepType = "Basic",
 			title = "Buy Plot",
 			description = "Step on the green button to purchase your plot.",
-			objective = CFrame.new(0, 0, 0), -- Replace with the actual position of the button
+			objective = CFrame.new(Plot.Position), -- Replace with the actual position of the button
 		} :: Types.BasicStep,
 
 		-- Example Leaderstats step: auto-completes when leaderstats.Gold reaches 1000

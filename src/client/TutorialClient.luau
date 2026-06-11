@@ -29,12 +29,13 @@ local function buildGui()
 	screenGui.Name = "TutorialGui"
 	screenGui.ResetOnSpawn = false
 	screenGui.DisplayOrder = 10
+	screenGui.IgnoreGuiInset = true
 	screenGui.Parent = LocalPlayer.PlayerGui
 
 	-- Main panel
 	local panel = Instance.new("Frame")
 	panel.Name = "Panel"
-	panel.Size = UDim2.new(0, 420, 0, 120)
+	panel.Size = UDim2.fromOffset(420, 120)
 	panel.AnchorPoint = Vector2.new(0.5, 0)
 	panel.Position = HIDDEN_POS
 	panel.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
@@ -71,7 +72,7 @@ local function buildGui()
 	local descLabel = Instance.new("TextLabel")
 	descLabel.Name = "DescLabel"
 	descLabel.Size = UDim2.new(1, 0, 0, 44)
-	descLabel.Position = UDim2.new(0, 0, 0, 32)
+	descLabel.Position = UDim2.fromOffset(0, 32)
 	descLabel.Font = Enum.Font.Gotham
 	descLabel.TextSize = 15
 	descLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
@@ -86,7 +87,7 @@ local function buildGui()
 	progressBar.Name = "ProgressBar"
 	progressBar.Visible = false
 	progressBar.Size = UDim2.new(1, 0, 0, 18)
-	progressBar.Position = UDim2.new(0, 0, 0, 80)
+	progressBar.Position = UDim2.fromOffset(0, 80)
 	progressBar.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
 	progressBar.BorderSizePixel = 0
 	progressBar.Parent = panel
@@ -97,7 +98,7 @@ local function buildGui()
 
 	local fillFrame = Instance.new("Frame")
 	fillFrame.Name = "Fill"
-	fillFrame.Size = UDim2.new(0, 0, 1, 0)
+	fillFrame.Size = UDim2.fromScale(0, 1)
 	fillFrame.BackgroundColor3 = Color3.fromRGB(80, 200, 80)
 	fillFrame.BorderSizePixel = 0
 	fillFrame.Parent = progressBar
@@ -108,7 +109,7 @@ local function buildGui()
 
 	local progressText = Instance.new("TextLabel")
 	progressText.Name = "ProgressText"
-	progressText.Size = UDim2.new(1, 0, 1, 0)
+	progressText.Size = UDim2.fromScale(1, 1)
 	progressText.BackgroundTransparency = 1
 	progressText.Font = Enum.Font.GothamBold
 	progressText.TextSize = 12
@@ -161,25 +162,37 @@ local function setupBeam(character: Model)
 			local newBeam = Instance.new("Beam")
 			newBeam.Attachment0 = att0
 			newBeam.Attachment1 = att1
-			newBeam.Color = ColorSequence.new(Color3.fromRGB(0, 200, 0))
-			newBeam.Texture = "rbxassetid://3270017556"
-			newBeam.TextureSpeed = 1
-			newBeam.TextureLength = 3
-			newBeam.Width0 = 1.5
-			newBeam.Width1 = 1.5
+			newBeam.Color = ColorSequence.new(Color3.fromRGB(0, 180, 0))
+			newBeam.Brightness = 3
+			newBeam.Texture = "rbxassetid://16848361091"
+			newBeam.TextureSpeed = 6
+			newBeam.Transparency = NumberSequence.new(0.5)
+			newBeam.TextureLength = 1.5
+			newBeam.TextureMode = Enum.TextureMode.Static
+			newBeam.Width0 = 3
+			newBeam.Width1 = 2
 			newBeam.FaceCamera = true
-			newBeam.Transparency = NumberSequence.new(0)
 			newBeam.Parent = workspace
 			beam = newBeam
 		end
 	end
 end
 
-local function setObjective(cframe: CFrame)
+local function clearObjective()
 	if objectivePart then
 		objectivePart:Destroy()
 		objectivePart = nil
+	end
+	if beam then
+		beam:Destroy()
 		beam = nil
+	end
+end
+
+local function setObjective(cframe: CFrame?)
+	clearObjective()
+	if cframe == nil then
+		return
 	end
 
 	local part = Instance.new("Part")
@@ -227,7 +240,7 @@ end
 
 local function updateProgress(fillFrame: Frame, progressText: TextLabel, current: number, target: number)
 	local ratio = math.clamp(current / target, 0, 1)
-	fillFrame.Size = UDim2.new(ratio, 0, 1, 0)
+	fillFrame.Size = UDim2.fromScale(ratio, 1)
 	progressText.Text = current .. " / " .. target
 end
 
@@ -291,7 +304,7 @@ local function showStep(
 			progressBar.Visible = false
 		end
 
-		setObjective(step.objective)
+		setObjective(step.objective :: CFrame?)
 		tweenIn(panel)
 		isPanelVisible = true
 	end)
@@ -306,7 +319,10 @@ local function onTutorialFinished(panel: Frame, completionSound: Sound?)
 	currentSeq += 1
 
 	task.spawn(function()
-		if completionSound then
+		-- Only play the sound if the panel was visible, meaning the tutorial was
+		-- actively in progress this session. Avoids playing on login when the
+		-- player already had all steps saved as complete.
+		if completionSound and isPanelVisible then
 			completionSound:Play()
 		end
 		if isPanelVisible then
@@ -314,14 +330,7 @@ local function onTutorialFinished(panel: Frame, completionSound: Sound?)
 			t.Completed:Wait()
 		end
 		isPanelVisible = false
-		if objectivePart then
-			objectivePart:Destroy()
-			objectivePart = nil
-		end
-		if beam then
-			beam:Destroy()
-			beam = nil
-		end
+		clearObjective()
 	end)
 end
 

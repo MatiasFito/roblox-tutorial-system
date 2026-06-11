@@ -155,6 +155,27 @@ function TutorialService.CompleteStep(player: Player)
 	applyStep(player, newIndex)
 end
 
+-- Public API: resets the player back to step 1 and clears their saved progress
+function TutorialService.ResetTutorial(player: Player)
+	local state = playerState[player]
+	if state and state.statWatcher then
+		state.statWatcher:Disconnect()
+		state.statWatcher = nil
+	end
+
+	local key = Config.DataStoreKeyPrefix .. player.UserId
+	pcall(function()
+		dataStore:SetAsync(key, 1)
+	end)
+
+	playerState[player] = {
+		stepIndex = 1,
+		statWatcher = nil,
+	}
+
+	applyStep(player, 1)
+end
+
 function TutorialService.Start()
 	Players.PlayerAdded:Connect(onPlayerAdded)
 	Players.PlayerRemoving:Connect(onPlayerRemoving)
