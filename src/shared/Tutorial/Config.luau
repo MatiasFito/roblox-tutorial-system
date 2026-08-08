@@ -28,6 +28,14 @@ local config: Types.TutorialConfig = {
 			statName = "Gold",
 			targetValue = 1000,
 		} :: Types.LeaderstatStep,
+
+		-- Example GuiElement step: completes when the player clicks the target button
+		{
+			stepType = "GuiElement",
+			title = "Draw a Card",
+			description = "Click the Draw button to draw a card from your deck.",
+			targetElement = "StarterGui.MainHud.Recruit.Decks.Deck1.Draw", -- Absolute path starting at StarterGui
+		} :: Types.GuiElementStep,
 	},
 }
 

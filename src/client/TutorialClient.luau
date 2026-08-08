@@ -1,6 +1,7 @@
 local TweenService = game:GetService("TweenService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local GuiService = game:GetService("GuiService")
 
 local LocalPlayer = Players.LocalPlayer
 local Config = require(ReplicatedStorage:WaitForChild("Shared").Tutorial.Config)
@@ -19,115 +20,32 @@ local objectivePart: Part? = nil
 local beamAttachment0: Attachment? = nil
 local beam: Beam? = nil
 local completionSoundRef: Sound? = nil
+local guiHighlight: ScreenGui? = nil
+local guiHighlightConnections: { RBXScriptConnection } = {}
+local stepCompletedRemote: RemoteEvent? = nil
 
 -- ──────────────────────────────────────────────────────────────────────────────
 -- GUI
 -- ──────────────────────────────────────────────────────────────────────────────
 
-local function buildGui()
-	local screenGui = Instance.new("ScreenGui")
-	screenGui.Name = "TutorialGui"
-	screenGui.ResetOnSpawn = false
-	screenGui.DisplayOrder = 10
-	screenGui.IgnoreGuiInset = true
-	screenGui.Parent = LocalPlayer.PlayerGui
+local function ensureGui()
+	local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+	local screenGui = playerGui:WaitForChild("TutorialGui") :: ScreenGui
+	local panel = screenGui:WaitForChild("Panel") :: Frame
+	local titleLabel = panel:WaitForChild("TitleLabel") :: TextLabel
+	local descLabel = panel:WaitForChild("DescLabel") :: TextLabel
+	local progressBar = panel:WaitForChild("ProgressBar") :: Frame
+	local fillFrame = progressBar:WaitForChild("Fill") :: Frame
+	local progressText = progressBar:WaitForChild("ProgressText") :: TextLabel
+	local completionSound = panel:FindFirstChild("CompletionSound") :: Sound?
 
-	-- Main panel
-	local panel = Instance.new("Frame")
-	panel.Name = "Panel"
-	panel.Size = UDim2.fromOffset(420, 120)
-	panel.AnchorPoint = Vector2.new(0.5, 0)
-	panel.Position = HIDDEN_POS
-	panel.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-	panel.BackgroundTransparency = 0.15
-	panel.BorderSizePixel = 0
-	panel.Parent = screenGui
-
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 10)
-	corner.Parent = panel
-
-	local padding = Instance.new("UIPadding")
-	padding.PaddingTop = UDim.new(0, 12)
-	padding.PaddingBottom = UDim.new(0, 12)
-	padding.PaddingLeft = UDim.new(0, 12)
-	padding.PaddingRight = UDim.new(0, 12)
-	padding.Parent = panel
-
-	-- Title
-	local titleLabel = Instance.new("TextLabel")
-	titleLabel.Name = "TitleLabel"
-	titleLabel.Size = UDim2.new(1, 0, 0, 30)
-	titleLabel.Position = UDim2.new(0, 0, 0, 0)
-	titleLabel.Font = Enum.Font.GothamBold
-	titleLabel.TextSize = 22
-	titleLabel.TextColor3 = Color3.new(1, 1, 1)
-	titleLabel.BackgroundTransparency = 1
-	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
-	titleLabel.TextYAlignment = Enum.TextYAlignment.Top
-	titleLabel.Text = ""
-	titleLabel.Parent = panel
-
-	-- Description
-	local descLabel = Instance.new("TextLabel")
-	descLabel.Name = "DescLabel"
-	descLabel.Size = UDim2.new(1, 0, 0, 44)
-	descLabel.Position = UDim2.fromOffset(0, 32)
-	descLabel.Font = Enum.Font.Gotham
-	descLabel.TextSize = 15
-	descLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-	descLabel.BackgroundTransparency = 1
-	descLabel.TextXAlignment = Enum.TextXAlignment.Left
-	descLabel.TextWrapped = true
-	descLabel.Text = ""
-	descLabel.Parent = panel
-
-	-- Progress bar (Leaderstats steps only)
-	local progressBar = Instance.new("Frame")
-	progressBar.Name = "ProgressBar"
-	progressBar.Visible = false
-	progressBar.Size = UDim2.new(1, 0, 0, 18)
-	progressBar.Position = UDim2.fromOffset(0, 80)
-	progressBar.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-	progressBar.BorderSizePixel = 0
-	progressBar.Parent = panel
-
-	local progressBarCorner = Instance.new("UICorner")
-	progressBarCorner.CornerRadius = UDim.new(0, 6)
-	progressBarCorner.Parent = progressBar
-
-	local fillFrame = Instance.new("Frame")
-	fillFrame.Name = "Fill"
-	fillFrame.Size = UDim2.fromScale(0, 1)
-	fillFrame.BackgroundColor3 = Color3.fromRGB(80, 200, 80)
-	fillFrame.BorderSizePixel = 0
-	fillFrame.Parent = progressBar
-
-	local fillCorner = Instance.new("UICorner")
-	fillCorner.CornerRadius = UDim.new(0, 6)
-	fillCorner.Parent = fillFrame
-
-	local progressText = Instance.new("TextLabel")
-	progressText.Name = "ProgressText"
-	progressText.Size = UDim2.fromScale(1, 1)
-	progressText.BackgroundTransparency = 1
-	progressText.Font = Enum.Font.GothamBold
-	progressText.TextSize = 12
-	progressText.TextColor3 = Color3.new(1, 1, 1)
-	progressText.ZIndex = 3
-	progressText.Text = ""
-	progressText.Parent = progressBar
-
-	-- Optional completion sound
-	local completionSound: Sound? = nil
-	if Config.CompletionSoundId ~= nil then
-		local sound = Instance.new("Sound")
-		sound.Name = "CompletionSound"
-		sound.SoundId = Config.CompletionSoundId
-		sound.Volume = 1
-		sound.Parent = panel
-		completionSound = sound
+	-- Set the SoundId from Config if present
+	if completionSound and Config.CompletionSoundId ~= nil then
+		completionSound.SoundId = Config.CompletionSoundId
 	end
+
+	-- Start hidden
+	panel.Position = HIDDEN_POS
 
 	return panel, titleLabel, descLabel, progressBar, fillFrame, progressText, completionSound
 end
@@ -136,7 +54,7 @@ end
 -- Beam
 -- ──────────────────────────────────────────────────────────────────────────────
 
-local function setupBeam(character: Model)
+local function ensureBeam(character: Model)
 	local hrp = character:FindFirstChild("HumanoidRootPart") :: BasePart?
 	if not hrp then
 		return
@@ -159,19 +77,10 @@ local function setupBeam(character: Model)
 	if objectivePart then
 		local att1 = objectivePart:FindFirstChild("Attachment0") :: Attachment?
 		if att1 then
-			local newBeam = Instance.new("Beam")
+			local beamTemplate = ReplicatedStorage:WaitForChild("TutorialSystem"):WaitForChild("Beam") :: Beam
+			local newBeam = beamTemplate:Clone()
 			newBeam.Attachment0 = att0
 			newBeam.Attachment1 = att1
-			newBeam.Color = ColorSequence.new(Color3.fromRGB(0, 180, 0))
-			newBeam.Brightness = 3
-			newBeam.Texture = "rbxassetid://16848361091"
-			newBeam.TextureSpeed = 6
-			newBeam.Transparency = NumberSequence.new(0.5)
-			newBeam.TextureLength = 1.5
-			newBeam.TextureMode = Enum.TextureMode.Static
-			newBeam.Width0 = 3
-			newBeam.Width1 = 2
-			newBeam.FaceCamera = true
 			newBeam.Parent = workspace
 			beam = newBeam
 		end
@@ -214,9 +123,117 @@ local function setObjective(cframe: CFrame?)
 	if beamAttachment0 ~= nil then
 		local char = LocalPlayer.Character
 		if char then
-			setupBeam(char)
+			ensureBeam(char)
 		end
 	end
+end
+
+-- ──────────────────────────────────────────────────────────────────────────────
+-- GUI highlight (GuiElement steps)
+-- ──────────────────────────────────────────────────────────────────────────────
+
+local function resolveGuiElement(path: string): GuiButton?
+	-- Path starts at StarterGui, e.g. "StarterGui.MainGui.Main.BuyButton"
+	-- We navigate from PlayerGui (the cloned copy) instead
+	local segments = string.split(path, ".")
+	if #segments < 2 then
+		return nil
+	end
+
+	local current: Instance? = LocalPlayer:WaitForChild("PlayerGui")
+	for i = 2, #segments do
+		if not current then
+			return nil
+		end
+		current = current:WaitForChild(segments[i], 10)
+	end
+
+	return current :: GuiButton?
+end
+
+local function clearGuiHighlight()
+	if guiHighlight then
+		guiHighlight:Destroy()
+		guiHighlight = nil
+	end
+	for _, conn in ipairs(guiHighlightConnections) do
+		conn:Disconnect()
+	end
+	table.clear(guiHighlightConnections)
+end
+
+local function setupGuiHighlight(targetElementPath: string)
+	clearGuiHighlight()
+
+	local target = resolveGuiElement(targetElementPath)
+	if not target then
+		warn("[TutorialClient] Could not resolve GuiElement target:", targetElementPath)
+		return
+	end
+
+	local template = ReplicatedStorage:WaitForChild("TutorialSystem"):WaitForChild("TutorialHighlight") :: ScreenGui
+	local highlight = template:Clone()
+	highlight.Parent = LocalPlayer:WaitForChild("PlayerGui")
+	guiHighlight = highlight
+
+	local top = highlight:WaitForChild("Top") :: Frame
+	local bottom = highlight:WaitForChild("Bottom") :: Frame
+	local left = highlight:WaitForChild("Left") :: Frame
+	local right = highlight:WaitForChild("Right") :: Frame
+	local border = highlight:WaitForChild("Border") :: Frame
+
+	local function getTargetScreenPosition(): Vector2
+		local absPos = target.AbsolutePosition
+		local targetGui = target:FindFirstAncestorOfClass("ScreenGui") :: ScreenGui?
+		if targetGui and not targetGui.IgnoreGuiInset then
+			absPos = absPos + GuiService:GetGuiInset()
+		end
+		return absPos
+	end
+
+	local function positionOverlay()
+		local absPos = getTargetScreenPosition()
+		local absSize = target.AbsoluteSize
+		local viewport = workspace.CurrentCamera :: Camera?
+		if not viewport then
+			return
+		end
+		local vpSize = viewport.ViewportSize
+
+		-- Top dark frame
+		top.Size = UDim2.fromOffset(vpSize.X, absPos.Y)
+		top.Position = UDim2.fromOffset(0, 0)
+
+		-- Bottom dark frame
+		bottom.Size = UDim2.fromOffset(vpSize.X, vpSize.Y - (absPos.Y + absSize.Y))
+		bottom.Position = UDim2.fromOffset(0, absPos.Y + absSize.Y)
+
+		-- Left dark frame
+		left.Size = UDim2.fromOffset(absPos.X, absSize.Y)
+		left.Position = UDim2.fromOffset(0, absPos.Y)
+
+		-- Right dark frame
+		right.Size = UDim2.fromOffset(vpSize.X - (absPos.X + absSize.X), absSize.Y)
+		right.Position = UDim2.fromOffset(absPos.X + absSize.X, absPos.Y)
+
+		-- Lime green border around the target
+		border.Size = UDim2.fromOffset(absSize.X, absSize.Y)
+		border.Position = UDim2.fromOffset(absPos.X, absPos.Y)
+	end
+
+	positionOverlay()
+	table.insert(guiHighlightConnections, target:GetPropertyChangedSignal("AbsolutePosition"):Connect(positionOverlay))
+	table.insert(guiHighlightConnections, target:GetPropertyChangedSignal("AbsoluteSize"):Connect(positionOverlay))
+
+	-- Complete the step when the target button is clicked
+	table.insert(
+		guiHighlightConnections,
+		target.Activated:Connect(function()
+			if stepCompletedRemote then
+				stepCompletedRemote:FireServer()
+			end
+		end)
+	)
 end
 
 -- ──────────────────────────────────────────────────────────────────────────────
@@ -300,6 +317,9 @@ local function showStep(
 					end)
 				end
 			end
+		elseif step.stepType == "GuiElement" then
+			progressBar.Visible = false
+			setupGuiHighlight(step.targetElement)
 		else
 			progressBar.Visible = false
 		end
@@ -331,6 +351,7 @@ local function onTutorialFinished(panel: Frame, completionSound: Sound?)
 		end
 		isPanelVisible = false
 		clearObjective()
+		clearGuiHighlight()
 	end)
 end
 
@@ -341,18 +362,19 @@ end
 local TutorialClient = {}
 
 function TutorialClient.Start()
-	local panel, titleLabel, descLabel, progressBar, fillFrame, progressText, completionSound = buildGui()
+	local panel, titleLabel, descLabel, progressBar, fillFrame, progressText, completionSound = ensureGui()
 	completionSoundRef = completionSound
 
 	-- Reconnect beam whenever character respawns
 	LocalPlayer.CharacterAdded:Connect(function(char)
-		setupBeam(char)
+		ensureBeam(char)
 	end)
 	if LocalPlayer.Character then
-		setupBeam(LocalPlayer.Character)
+		ensureBeam(LocalPlayer.Character)
 	end
 
 	local remotes = ReplicatedStorage:WaitForChild("TutorialRemotes")
+	stepCompletedRemote = remotes:WaitForChild("TutorialStepCompleted") :: RemoteEvent
 
 	remotes:WaitForChild("TutorialStepChanged").OnClientEvent:Connect(function(step, idx, total)
 		showStep(step, idx, total, panel, titleLabel, descLabel, progressBar, fillFrame, progressText)

@@ -26,6 +26,7 @@ end
 
 local stepChangedRemote: RemoteEvent = getOrCreateRemote("TutorialStepChanged")
 local finishedRemote: RemoteEvent = getOrCreateRemote("TutorialFinished")
+local stepCompletedRemote: RemoteEvent = getOrCreateRemote("TutorialStepCompleted")
 
 local dataStore = DataStoreService:GetDataStore(Config.DataStoreName)
 
@@ -108,11 +109,20 @@ local function onPlayerAdded(player: Player)
 	end
 
 	playerState[player] = {
-		stepIndex = savedIndex,
+		stepIndex = 1,
 		statWatcher = nil,
 	}
 
-	applyStep(player, savedIndex)
+	-- Reset leaderstats value to 0
+	local statFolder = player:FindFirstChild("leaderstats")
+	if statFolder then
+		local goldValue = statFolder:FindFirstChild("Gold")
+		if goldValue then
+			(goldValue :: IntValue).Value = 0
+		end
+	end
+
+	applyStep(player, 1)
 end
 
 local function onPlayerRemoving(player: Player)
@@ -173,6 +183,15 @@ function TutorialService.ResetTutorial(player: Player)
 		statWatcher = nil,
 	}
 
+	-- Reset leaderstats value to 0
+	local statFolder = player:FindFirstChild("leaderstats")
+	if statFolder then
+		local goldValue = statFolder:FindFirstChild("Gold")
+		if goldValue then
+			(goldValue :: IntValue).Value = 0
+		end
+	end
+
 	applyStep(player, 1)
 end
 
@@ -184,6 +203,19 @@ function TutorialService.Start()
 	for _, player in ipairs(Players:GetPlayers()) do
 		task.spawn(onPlayerAdded, player)
 	end
+
+	-- Handle GuiElement step completion (client fires when the target button is clicked)
+	stepCompletedRemote.OnServerEvent:Connect(function(player)
+		local state = playerState[player]
+		if not state then
+			return
+		end
+
+		local step = Config.Steps[state.stepIndex]
+		if step and step.stepType == "GuiElement" then
+			TutorialService.CompleteStep(player)
+		end
+	end)
 end
 
 return TutorialService
